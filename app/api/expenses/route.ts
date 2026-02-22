@@ -1,0 +1,44 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const expenses = await prisma.expense.findMany({
+        where: { userId: session.user.id },
+        orderBy: { date: "desc" },
+    });
+
+    return NextResponse.json(expenses);
+}
+
+export async function POST(request: Request) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { title, amount, category, description, date } = body;
+
+    if (!title || !amount || !category) {
+        return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    }
+
+    const expense = await prisma.expense.create({
+        data: {
+            title,
+            amount: parseFloat(amount),
+            category,
+            description: description || null,
+            date: date ? new Date(date) : new Date(),
+            userId: session.user.id,
+        },
+    });
+
+    return NextResponse.json(expense, { status: 201 });
+}

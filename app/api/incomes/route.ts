@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getDb } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 
 export async function GET() {
     const session = await auth();
@@ -9,10 +8,10 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = getDb();
-    const incomes = db
-        .prepare("SELECT * FROM Income WHERE userId = ? ORDER BY date DESC")
-        .all(session.user.id);
+    const incomes = await prisma.income.findMany({
+        where: { userId: session.user.id },
+        orderBy: { date: "desc" }
+    });
 
     return NextResponse.json(incomes);
 }
@@ -30,15 +29,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const db = getDb();
-    const id = randomBytes(8).toString("hex");
-    const now = new Date().toISOString();
-    const dateStr = date ? new Date(date).toISOString() : now;
+    const dateStr = date ? new Date(date) : new Date();
 
-    db.prepare(
-        "INSERT INTO Income (id, title, amount, category, description, date, userId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, title, parseFloat(amount), category, description || null, dateStr, session.user.id, now, now);
+    const income = await prisma.income.create({
+        data: {
+            title,
+            amount: parseFloat(amount),
+            category,
+            description: description || null,
+            date: dateStr,
+            userId: session.user.id
+        }
+    });
 
-    const income = db.prepare("SELECT * FROM Income WHERE id = ?").get(id);
     return NextResponse.json(income, { status: 201 });
 }

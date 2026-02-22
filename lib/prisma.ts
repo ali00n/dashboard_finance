@@ -1,12 +1,15 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { PrismaClient } from '@prisma/client'
 
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (!_db) {
-    const dbPath = path.join(process.cwd(), "dev.db");
-    _db = new Database(dbPath);
-  }
-  return _db;
+const prismaClientSingleton = () => {
+  return new PrismaClient()
 }
+
+declare const globalThis: {
+  prismaGlobal: ReturnType<typeof prismaClientSingleton>;
+} & typeof global;
+
+const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
+
+export default prisma
+
+if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma

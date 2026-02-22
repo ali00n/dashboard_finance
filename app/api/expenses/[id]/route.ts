@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { getDb } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function PUT(
@@ -15,20 +15,24 @@ export async function PUT(
     const body = await request.json();
     const { title, amount, category, description, date } = body;
 
-    const db = getDb();
-    const existing = db.prepare("SELECT * FROM Expense WHERE id = ?").get(id) as any;
+    const existing = await prisma.expense.findUnique({ where: { id } });
     if (!existing || existing.userId !== session.user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const now = new Date().toISOString();
-    const dateStr = date ? new Date(date).toISOString() : existing.date;
+    const dateStr = date ? new Date(date) : existing.date;
 
-    db.prepare(
-        "UPDATE Expense SET title=?, amount=?, category=?, description=?, date=?, updatedAt=? WHERE id=?"
-    ).run(title, parseFloat(amount), category, description || null, dateStr, now, id);
+    const expense = await prisma.expense.update({
+        where: { id },
+        data: {
+            title,
+            amount: parseFloat(amount),
+            category,
+            description: description || null,
+            date: dateStr,
+        }
+    });
 
-    const expense = db.prepare("SELECT * FROM Expense WHERE id = ?").get(id);
     return NextResponse.json(expense);
 }
 
@@ -42,12 +46,12 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const db = getDb();
-    const existing = db.prepare("SELECT * FROM Expense WHERE id = ?").get(id) as any;
+
+    const existing = await prisma.expense.findUnique({ where: { id } });
     if (!existing || existing.userId !== session.user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    db.prepare("DELETE FROM Expense WHERE id = ?").run(id);
+    await prisma.expense.delete({ where: { id } });
     return NextResponse.json({ ok: true });
 }

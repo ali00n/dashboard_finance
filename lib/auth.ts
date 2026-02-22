@@ -1,18 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import Database from "better-sqlite3";
-import path from "path";
-
-function getUser(username: string): { id: string; username: string; password: string } | null {
-    const dbPath = path.join(process.cwd(), "dev.db");
-    const db = new Database(dbPath, { readonly: true });
-    try {
-        return db.prepare("SELECT id, username, password FROM User WHERE username = ?").get(username) as any;
-    } finally {
-        db.close();
-    }
-}
+import prisma from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     providers: [
@@ -25,7 +14,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             async authorize(credentials) {
                 if (!credentials?.username || !credentials?.password) return null;
 
-                const user = getUser(credentials.username as string);
+                const user = await prisma.user.findUnique({
+                    where: { username: credentials.username as string }
+                });
                 if (!user) return null;
 
                 const isValid = await bcrypt.compare(credentials.password as string, user.password);

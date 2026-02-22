@@ -17,30 +17,37 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-    const session = await auth();
-    if (!session?.user?.id) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { title, amount, category, description, date } = body;
-
-    if (!title || !amount || !category) {
-        return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-    }
-
-    const dateStr = date ? new Date(date) : new Date();
-
-    const income = await prisma.income.create({
-        data: {
-            title,
-            amount: parseFloat(amount),
-            category,
-            description: description || null,
-            date: dateStr,
-            userId: session.user.id
+    try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-    });
 
-    return NextResponse.json(income, { status: 201 });
+        const body = await request.json();
+        console.log("POST /api/incomes Payload:", body);
+
+        const { title, amount, category, description, date } = body;
+
+        if (!title || amount === undefined || !category) {
+            return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+        }
+
+        const dateStr = date ? new Date(date) : new Date();
+
+        const income = await prisma.income.create({
+            data: {
+                title,
+                amount: parseFloat(amount),
+                category,
+                description: description || null,
+                date: dateStr,
+                userId: session.user.id
+            }
+        });
+
+        return NextResponse.json(income, { status: 201 });
+    } catch (error: any) {
+        console.error("POST /api/incomes Error:", error);
+        return NextResponse.json({ error: "Internal Server Error", details: error?.message || String(error) }, { status: 500 });
+    }
 }

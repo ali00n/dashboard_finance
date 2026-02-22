@@ -1,56 +1,61 @@
-// Load env
-const path = require("path");
-const fs = require("fs");
-
-// Manually load .env
-const envPath = path.join(__dirname, "../.env");
-const envContent = fs.readFileSync(envPath, "utf-8");
-envContent.split("\n").forEach((line) => {
-    const [key, ...vals] = line.split("=");
-    if (key && vals.length) process.env[key.trim()] = vals.join("=").trim().replace(/"/g, "");
-});
-
-const dbUrl = process.env.DATABASE_URL || "file:./dev.db";
-
-const { PrismaClient } = require("@prisma/client");
+const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
+const path = require("path");
 
-const prisma = new PrismaClient({
-    datasourceUrl: dbUrl,
-});
+const dbPath = path.join(__dirname, "../dev.db");
+const db = new Database(dbPath);
 
-async function main() {
+async function seed() {
     const hashedPassword = await bcrypt.hash("host3000", 12);
 
-    const user = await prisma.user.upsert({
-        where: { username: "alissondev" },
-        update: {},
-        create: {
-            username: "alissondev",
-            password: hashedPassword,
-        },
-    });
+    // Insert or replace user
+    const existingUser = db.prepare("SELECT id FROM User WHERE username = ?").get("alissondev");
 
-    console.log("Usuário criado:", user.username);
+    let userId;
+    if (existingUser) {
+        userId = existingUser.id;
+        console.log("Usuário já existe:", userId);
+    } else {
+        const { v4: uuidv4 } = require("crypto");
+        // Use a simple cuid-like ID
+        const id = "user_" + Date.now().toString(36);
+        db.prepare("INSERT INTO User (id, username, password, createdAt) VALUES (?, ?, ?, ?)").run(
+            id,
+            "alissondev",
+            hashedPassword,
+            new Date().toISOString()
+        );
+        userId = id;
+        console.log("Usuário criado:", userId);
+    }
 
-    await prisma.expense.deleteMany({ where: { userId: user.id } });
+    // Delete existing expenses for this user
+    db.prepare("DELETE FROM Expense WHERE userId = ?").run(userId);
 
     const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
     const sampleExpenses = [
-        { title: "Almoço restaurante", amount: 35.5, category: "Alimentação", date: new Date(now.getFullYear(), now.getMonth(), 10) },
-        { title: "Uber para o trabalho", amount: 22.0, category: "Transporte", date: new Date(now.getFullYear(), now.getMonth(), 12) },
-        { title: "Conta de luz", amount: 180.0, category: "Moradia", date: new Date(now.getFullYear(), now.getMonth(), 5) },
-        { title: "Cinema com amigos", amount: 45.0, category: "Lazer", date: new Date(now.getFullYear(), now.getMonth(), 15) },
-        { title: "Farmácia", amount: 67.3, category: "Saúde", date: new Date(now.getFullYear(), now.getMonth(), 8) },
+        { title: "Almoço restaurante", amount: 35.5, category: "Alimentação", date: new Date(currentYear, currentMonth, 10).toISOString(), description: null },
+        { title: "Uber para o trabalho", amount: 22.0, category: "Transporte", date: new Date(currentYear, currentMonth, 12).toISOString(), description: null },
+        { title: "Conta de luz", amount: 180.0, category: "Moradia", date: new Date(currentYear, currentMonth, 5).toISOString(), description: "Conta mensal de energia" },
+        { title: "Cinema com amigos", amount: 45.0, category: "Lazer", date: new Date(currentYear, currentMonth, 15).toISOString(), description: null },
+        { title: "Farmácia", amount: 67.3, category: "Saúde", date: new Date(currentYear, currentMonth, 8).toISOString(), description: "Medicamentos" },
     ];
 
+    const insertExpense = db.prepare(
+        "INSERT INTO Expense (id, title, amount, category, description, date, userId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+
     for (const exp of sampleExpenses) {
-        await prisma.expense.create({ data: { ...exp, userId: user.id } });
+        const id = "exp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        const now_iso = new Date().toISOString();
+        insertExpense.run(id, exp.title, exp.amount, exp.category, exp.description, exp.date, userId, now_iso, now_iso);
     }
 
     console.log(sampleExpenses.length + " gastos de exemplo criados com sucesso!");
+    db.close();
 }
 
-main()
-    .catch((e) => { console.error(e); process.exit(1); })
-    .finally(() => prisma.$disconnect());
+seed().catch((e) => { console.error(e); process.exit(1); });

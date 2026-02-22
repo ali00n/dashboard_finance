@@ -1,7 +1,18 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import Database from "better-sqlite3";
+import path from "path";
+
+function getUser(username: string): { id: string; username: string; password: string } | null {
+    const dbPath = path.join(process.cwd(), "dev.db");
+    const db = new Database(dbPath, { readonly: true });
+    try {
+        return db.prepare("SELECT id, username, password FROM User WHERE username = ?").get(username) as any;
+    } finally {
+        db.close();
+    }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     providers: [
@@ -12,37 +23,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 password: { label: "Senha", type: "password" },
             },
             async authorize(credentials) {
-                if (!credentials?.username || !credentials?.password) {
-                    return null;
-                }
+                if (!credentials?.username || !credentials?.password) return null;
 
-                const user = await prisma.user.findUnique({
-                    where: { username: credentials.username as string },
-                });
-
+                const user = getUser(credentials.username as string);
                 if (!user) return null;
 
-                const isPasswordValid = await bcrypt.compare(
-                    credentials.password as string,
-                    user.password
-                );
+                const isValid = await bcrypt.compare(credentials.password as string, user.password);
+                if (!isValid) return null;
 
-                if (!isPasswordValid) return null;
-
-                return {
-                    id: user.id,
-                    name: user.username,
-                    email: user.username,
-                };
+                return { id: user.id, name: user.username, email: user.username };
             },
         }),
     ],
-    session: {
-        strategy: "jwt",
-    },
-    pages: {
-        signIn: "/login",
-    },
+    session: { strategy: "jwt" },
+    secret: process.env.NEXTAUTH_SECRET,
+    pages: { signIn: "/login" },
     callbacks: {
         async jwt({ token, user }) {
             if (user) {

@@ -40,7 +40,6 @@ export default function DashboardPage() {
     }, [fetchExpenses]);
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja excluir este gasto?")) return;
         await fetch(`/api/expenses/${id}`, { method: "DELETE" });
         fetchExpenses();
     };

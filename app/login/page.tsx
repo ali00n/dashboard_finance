@@ -122,7 +122,7 @@ export default function LoginPage() {
                     </form>
 
                     <p className="text-center text-xs text-slate-600 mt-6">
-                        v1.0.0 — Uso pessoal
+                        v1.0.1 — Uso pessoal
                     </p>
                 </div>
             </div>

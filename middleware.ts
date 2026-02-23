@@ -1,12 +1,21 @@
-import NextAuth from "next-auth";
-import { authConfig } from "@/lib/auth.config";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-const { auth } = NextAuth(authConfig);
-
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
-    const isLoggedIn = !!req.auth;
+
+    const token = await getToken({
+        req,
+        secret: process.env.NEXTAUTH_SECRET,
+        // NextAuth v5 (authjs) uses "authjs.session-token" in dev
+        // and "__Secure-authjs.session-token" in prod (HTTPS)
+        cookieName:
+            process.env.NODE_ENV === "production"
+                ? "__Secure-authjs.session-token"
+                : "authjs.session-token",
+    });
+
+    const isLoggedIn = !!token;
 
     if (pathname.startsWith("/dashboard") && !isLoggedIn) {
         return NextResponse.redirect(new URL("/login", req.url));
@@ -17,7 +26,7 @@ export default auth((req) => {
     }
 
     return NextResponse.next();
-});
+}
 
 export const config = {
     matcher: ["/dashboard/:path*", "/login"],

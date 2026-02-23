@@ -3,11 +3,8 @@ import NextAuth from "next-auth";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
     providers: [],  // No providers needed in middleware - JWT only
-    session: {
-        strategy: "jwt",
-    },
+    session: { strategy: "jwt" },
     secret: process.env.NEXTAUTH_SECRET,
-    pages: {
-        signIn: "/login",
-    },
+    trustHost: true,
+    pages: { signIn: "/login" },
 });

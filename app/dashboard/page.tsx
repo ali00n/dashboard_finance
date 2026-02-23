@@ -41,6 +41,12 @@ export default function DashboardPage() {
                 fetch("/api/expenses"),
                 fetch("/api/incomes"),
             ]);
+
+            if (expRes.status === 401 || incRes.status === 401) {
+                window.location.href = "/login";
+                return;
+            }
+
             setExpenses(await expRes.json().then(d => Array.isArray(d) ? d : []));
             setIncomes(await incRes.json().then(d => Array.isArray(d) ? d : []));
         } catch {

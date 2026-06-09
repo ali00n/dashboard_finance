@@ -3,9 +3,8 @@ import prisma from "@/lib/prisma";
 import { Resend } from "resend";
 import crypto from "crypto";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(request: Request) {
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const { email } = await request.json();
     if (!email) return NextResponse.json({ error: "E-mail obrigatório" }, { status: 400 });
 

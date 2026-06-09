@@ -7,9 +7,9 @@ async function main() {
     const passwordHash = await bcrypt.hash("host3000", 12);
     const updatedUser = await prisma.user.update({
         where: { username: "alissondev" },
-        data: { password: passwordHash }
+        data: { password: passwordHash, email: "alisontattooskate@gmail.com" }
     });
-    console.log("Updated user password to 'host3000':", updatedUser.username);
+    console.log("Updated user password and email:", updatedUser.username);
 }
 
 main()

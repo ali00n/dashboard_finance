@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
     const [username, setUsername] = useState("");
@@ -121,9 +122,12 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <p className="text-center text-xs text-slate-600 mt-6">
-                        v1.0.2 — Uso pessoal
-                    </p>
+                    <div className="flex items-center justify-between mt-6">
+                        <Link href="/forgot-password" className="text-xs text-slate-500 hover:text-indigo-400 transition-colors">
+                            Esqueci minha senha
+                        </Link>
+                        <p className="text-xs text-slate-600">v1.0.2 — Uso pessoal</p>
+                    </div>
                 </div>
             </div>
         </div>

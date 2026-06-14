@@ -5,7 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-type Tab = "login" | "register";
+type Tab = "login" | "register" | "resend";
 
 function EyeIcon({ open }: { open: boolean }) {
     return open ? (
@@ -68,6 +68,11 @@ export default function LoginPage() {
     const [regError, setRegError] = useState("");
     const [regSuccess, setRegSuccess] = useState("");
 
+    // Resend verification state
+    const [resendEmail, setResendEmail] = useState("");
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendMsg, setResendMsg] = useState("");
+
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
         setLoginLoading(true);
@@ -87,6 +92,19 @@ export default function LoginPage() {
             router.push("/dashboard");
             router.refresh();
         }
+    }
+
+    async function handleResend(e: React.FormEvent) {
+        e.preventDefault();
+        setResendLoading(true);
+        setResendMsg("");
+        await fetch("/api/auth/resend-verification", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: resendEmail }),
+        });
+        setResendLoading(false);
+        setResendMsg("Se esse e-mail tiver uma conta aguardando verificação, você receberá um novo link em instantes.");
     }
 
     async function handleRegister(e: React.FormEvent) {
@@ -146,16 +164,20 @@ export default function LoginPage() {
                 <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
                     {/* Tabs */}
                     <div className="flex border-b border-[#1e1e35]">
-                        {(["login", "register"] as Tab[]).map((t) => (
+                        {([
+                            { key: "login", label: "Entrar" },
+                            { key: "register", label: "Criar Conta" },
+                            { key: "resend", label: "Verificação" },
+                        ] as { key: Tab; label: string }[]).map(({ key, label }) => (
                             <button
-                                key={t}
-                                onClick={() => { setTab(t); setLoginError(""); setRegError(""); setRegSuccess(""); }}
-                                className={`flex-1 py-3.5 text-sm font-semibold transition-all duration-200 ${tab === t
+                                key={key}
+                                onClick={() => { setTab(key); setLoginError(""); setRegError(""); setRegSuccess(""); setResendMsg(""); }}
+                                className={`flex-1 py-3.5 text-xs font-semibold transition-all duration-200 ${tab === key
                                     ? "text-white border-b-2 border-indigo-500 bg-indigo-600/5"
                                     : "text-slate-500 hover:text-slate-300"
                                     }`}
                             >
-                                {t === "login" ? "Entrar" : "Criar Conta"}
+                                {label}
                             </button>
                         ))}
                     </div>
@@ -217,6 +239,56 @@ export default function LoginPage() {
                                     </Link>
                                     <p className="text-xs text-slate-600">v1.1.0</p>
                                 </div>
+                            </form>
+                        )}
+
+                        {/* RESEND VERIFICATION FORM */}
+                        {tab === "resend" && (
+                            <form onSubmit={handleResend} className="space-y-5">
+                                <div className="text-center space-y-1 pb-2">
+                                    <p className="text-slate-300 text-sm font-medium">Não recebeu o e-mail de verificação?</p>
+                                    <p className="text-slate-500 text-xs">Digite seu e-mail e enviaremos um novo link.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">E-mail</label>
+                                    <input
+                                        type="email"
+                                        value={resendEmail}
+                                        onChange={(e) => setResendEmail(e.target.value)}
+                                        placeholder="seu@email.com"
+                                        required
+                                        className={inputClass}
+                                    />
+                                </div>
+
+                                {resendMsg && (
+                                    <div className="flex items-start gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+                                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {resendMsg}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={resendLoading}
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200"
+                                >
+                                    {resendLoading ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                            Enviando...
+                                        </span>
+                                    ) : "Reenviar e-mail de verificação"}
+                                </button>
+
+                                <p className="text-xs text-slate-600 text-center">
+                                    Verifique também a pasta de spam.
+                                </p>
                             </form>
                         )}
 

@@ -6,6 +6,37 @@ import crypto from "crypto";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+async function resendVerificationEmail(userId: string, email: string) {
+    try {
+        await prisma.emailVerificationToken.updateMany({
+            where: { userId, used: false },
+            data: { used: true },
+        });
+        const token = crypto.randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await prisma.emailVerificationToken.create({ data: { token, userId, expiresAt } });
+
+        const baseUrl = process.env.NEXTAUTH_URL ?? `https://${process.env.VERCEL_URL}`;
+        const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+            from: process.env.RESEND_FROM ?? "onboarding@resend.dev",
+            to: email,
+            subject: "Confirme seu e-mail — Finance Dashboard",
+            html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#07070d;color:#e2e8f0;border-radius:16px;">
+                <h2 style="color:#fff;text-align:center;">Confirme seu e-mail</h2>
+                <p style="color:#94a3b8;text-align:center;">Clique no botão abaixo para ativar sua conta (link válido por 24h).</p>
+                <div style="text-align:center;margin:32px 0;">
+                    <a href="${verifyUrl}" style="display:inline-block;padding:14px 32px;background:#6366f1;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Confirmar e-mail</a>
+                </div>
+                <p style="color:#475569;font-size:12px;text-align:center;">Ou copie: <a href="${verifyUrl}" style="color:#6366f1;">${verifyUrl}</a></p>
+            </div>`,
+        });
+    } catch (err) {
+        console.error("resendVerificationEmail failed:", err);
+    }
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -32,6 +63,14 @@ export async function POST(request: Request) {
         // 1. Check email not already in use BEFORE consuming the invite code
         const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existing) {
+            // If account exists but is unverified, resend the verification email
+            if (!existing.emailVerified) {
+                await resendVerificationEmail(existing.id, normalizedEmail);
+                return NextResponse.json(
+                    { ok: true, message: "Essa conta já existe mas não foi verificada. Reenviamos o e-mail de verificação. Verifique sua caixa de entrada (e o spam)." },
+                    { status: 200 }
+                );
+            }
             return NextResponse.json(
                 { error: "Não foi possível criar a conta. Verifique os dados e tente novamente." },
                 { status: 400 }

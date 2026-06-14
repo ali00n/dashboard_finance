@@ -56,12 +56,19 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
 
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    // Invite codes state
+    type InviteCode = { id: string; code: string; maxUses: number; useCount: number; expiresAt: string | null; createdAt: string };
+    const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+    const [inviteGenerating, setInviteGenerating] = useState(false);
+    const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
     useEffect(() => {
         const fetchData = async () => {
-            const [salaryRes, fixedRes, overtimeRes] = await Promise.all([
+            const [salaryRes, fixedRes, overtimeRes, inviteRes] = await Promise.all([
                 fetch("/api/salary-config"),
                 fetch("/api/fixed-expenses"),
                 fetch(`/api/monthly-overtime?month=${selectedMonth}`),
+                fetch("/api/invite-codes"),
             ]);
             if (salaryRes.ok) {
                 const d = await salaryRes.json();
@@ -75,9 +82,36 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                 const d = await overtimeRes.json();
                 setOvertimeAmount(d?.amount > 0 ? String(d.amount) : "");
             }
+            if (inviteRes.ok) {
+                const d = await inviteRes.json();
+                setInviteCodes(Array.isArray(d) ? d : []);
+            }
         };
         fetchData();
     }, [selectedMonth]);
+
+    const generateInvite = async () => {
+        setInviteGenerating(true);
+        try {
+            const res = await fetch("/api/invite-codes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ maxUses: 1 }),
+            });
+            if (res.ok) {
+                const code = await res.json();
+                setInviteCodes(prev => [code, ...prev]);
+            }
+        } finally {
+            setInviteGenerating(false);
+        }
+    };
+
+    const copyCode = (code: string) => {
+        navigator.clipboard.writeText(code);
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode(null), 2000);
+    };
 
     const saveSalary = async () => {
         setSalarySaving(true);
@@ -271,6 +305,87 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                                 {salarySaving ? "Salvando..." : salarySaved ? "Salvo ✓" : "Salvar"}
                             </button>
                         </div>
+                    </section>
+
+                    {/* Invite Codes Section */}
+                    <section>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="w-1 h-5 rounded-full bg-indigo-500" />
+                                <h3 className="text-xs font-semibold text-white uppercase tracking-widest">Convites</h3>
+                            </div>
+                            <button
+                                onClick={generateInvite}
+                                disabled={inviteGenerating}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                {inviteGenerating ? (
+                                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                )}
+                                Gerar Código
+                            </button>
+                        </div>
+
+                        {inviteCodes.length === 0 ? (
+                            <div className="bg-[#0e0e1a] border border-dashed border-[#1e1e35] rounded-2xl p-6 text-center">
+                                <p className="text-slate-500 text-sm">Nenhum convite gerado ainda.</p>
+                                <p className="text-slate-600 text-xs mt-1">Clique em "Gerar Código" para criar um.</p>
+                            </div>
+                        ) : (
+                            <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl overflow-hidden">
+                                {inviteCodes.map((inv, i) => {
+                                    const isUsed = inv.useCount >= inv.maxUses;
+                                    return (
+                                        <div
+                                            key={inv.id}
+                                            className={`flex items-center gap-3 px-4 py-3 ${i !== inviteCodes.length - 1 ? "border-b border-[#1e1e35]" : ""}`}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <span className={`font-mono text-sm font-bold tracking-widest ${isUsed ? "text-slate-600 line-through" : "text-white"}`}>
+                                                    {inv.code}
+                                                </span>
+                                                <p className="text-[11px] text-slate-600 mt-0.5">
+                                                    {isUsed ? "Utilizado" : `${inv.useCount}/${inv.maxUses} uso${inv.maxUses !== 1 ? "s" : ""}`}
+                                                    {inv.expiresAt && ` · expira ${new Date(inv.expiresAt).toLocaleDateString("pt-BR")}`}
+                                                </p>
+                                            </div>
+                                            {!isUsed && (
+                                                <button
+                                                    onClick={() => copyCode(inv.code)}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-xs rounded-lg transition-colors shrink-0"
+                                                >
+                                                    {copiedCode === inv.code ? (
+                                                        <>
+                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            Copiado!
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                            </svg>
+                                                            Copiar
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <p className="text-[11px] text-slate-600 mt-2 text-center">
+                            Cada código pode ser usado 1 vez. Compartilhe com quem quiser convidar.
+                        </p>
                     </section>
 
                     {/* Fixed Expenses Section */}

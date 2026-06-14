@@ -5,6 +5,8 @@ type Props = {
     expenses: Expense[];
     incomes: Income[];
     loading: boolean;
+    salaryAmount?: number;
+    fixedExpensesTotal?: number;
 };
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
@@ -41,21 +43,18 @@ function StatCard({ label, value, icon, sub, color = "indigo" }: {
     );
 }
 
-export default function StatsCards({ expenses, incomes, loading }: Props) {
+export default function StatsCards({ expenses, incomes, loading, salaryAmount = 0, fixedExpensesTotal = 0 }: Props) {
     const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    const now = new Date();
 
-    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-    const totalIncomes = incomes.reduce((s, e) => s + e.amount, 0);
-    const balance = totalIncomes - totalExpenses;
+    const variableExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const variableIncomes = incomes.reduce((s, e) => s + e.amount, 0);
 
-    const monthlyExpenses = expenses
-        .filter(e => { const d = new Date(e.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
-        .reduce((s, e) => s + e.amount, 0);
+    const totalRecebido = salaryAmount + variableIncomes;
+    const totalGasto = fixedExpensesTotal + variableExpenses;
+    const balance = totalRecebido - totalGasto;
 
-    const monthlyIncomes = incomes
-        .filter(e => { const d = new Date(e.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
-        .reduce((s, e) => s + e.amount, 0);
+    const hasSalary = salaryAmount > 0;
+    const netSalary = salaryAmount - fixedExpensesTotal;
 
     if (loading) {
         return (
@@ -72,12 +71,12 @@ export default function StatsCards({ expenses, incomes, loading }: Props) {
     }
 
     const balanceColor = balance >= 0 ? "emerald" : "red";
+    const netSalaryColor = netSalary >= 0 ? "emerald" : "red";
 
     return (
-        // 2 colunas no mobile, 4 no lg:
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatCard
-                label="Saldo Atual"
+                label="Saldo do Mês"
                 value={fmt(balance)}
                 color={balanceColor}
                 sub={balance >= 0 ? "Positivo ✓" : "Saldo negativo"}
@@ -85,25 +84,35 @@ export default function StatsCards({ expenses, incomes, loading }: Props) {
             />
             <StatCard
                 label="Recebido no Mês"
-                value={fmt(monthlyIncomes)}
+                value={fmt(totalRecebido)}
                 color="emerald"
-                sub={now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                sub={hasSalary ? `Salário + R$${variableIncomes.toFixed(0)} variável` : `${incomes.length} recebiment${incomes.length !== 1 ? "os" : "o"}`}
                 icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 11l5-5m0 0l5 5m-5-5v12" /></svg>}
             />
             <StatCard
                 label="Gasto no Mês"
-                value={fmt(monthlyExpenses)}
+                value={fmt(totalGasto)}
                 color="red"
-                sub={now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                sub={fixedExpensesTotal > 0 ? `${fmt(fixedExpensesTotal)} fixo + variável` : `${expenses.length} gasto${expenses.length !== 1 ? "s" : ""}`}
                 icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 13l-5 5m0 0l-5-5m5 5V6" /></svg>}
             />
-            <StatCard
-                label="Total Recebido"
-                value={fmt(totalIncomes)}
-                color="purple"
-                sub={`${incomes.length} recebiment${incomes.length !== 1 ? "os" : "o"}`}
-                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
-            />
+            {hasSalary ? (
+                <StatCard
+                    label="Salário Líquido"
+                    value={fmt(netSalary)}
+                    color={netSalaryColor}
+                    sub="Após descontar fixos"
+                    icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                />
+            ) : (
+                <StatCard
+                    label="Total Recebido"
+                    value={fmt(variableIncomes)}
+                    color="purple"
+                    sub={`${incomes.length} recebiment${incomes.length !== 1 ? "os" : "o"}`}
+                    icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
+                />
+            )}
         </div>
     );
 }

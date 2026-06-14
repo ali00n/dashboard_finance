@@ -8,14 +8,17 @@ datasource db {
 }
 
 model User {
-  id          String               @id @default(cuid())
-  username    String               @unique
-  email       String?              @unique
-  password    String
-  createdAt   DateTime             @default(now())
-  expenses    Expense[]
-  incomes     Income[]
-  resetTokens PasswordResetToken[]
+  id               String               @id @default(cuid())
+  username         String               @unique
+  email            String?              @unique
+  password         String
+  createdAt        DateTime             @default(now())
+  expenses         Expense[]
+  incomes          Income[]
+  resetTokens      PasswordResetToken[]
+  fixedExpenses    FixedExpense[]
+  salaryConfig     SalaryConfig?
+  monthlyOvertimes MonthlyOvertime[]
 }
 
 model PasswordResetToken {
@@ -52,4 +55,38 @@ model Income {
   user        User     @relation(fields: [userId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model FixedExpense {
+  id          String   @id @default(cuid())
+  title       String
+  amount      Float
+  category    String
+  description String?
+  isActive    Boolean  @default(true)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalaryConfig {
+  id         String   @id @default(cuid())
+  baseSalary Float    @default(0)
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model MonthlyOvertime {
+  id        String   @id @default(cuid())
+  month     String
+  amount    Float    @default(0)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month])
 }

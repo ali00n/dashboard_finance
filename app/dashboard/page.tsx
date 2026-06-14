@@ -10,6 +10,7 @@ import EditExpenseModal from "@/components/EditExpenseModal";
 import AddIncomeModal from "@/components/AddIncomeModal";
 import EditIncomeModal from "@/components/EditIncomeModal";
 import Charts from "@/components/Charts";
+import FinancialSettingsModal from "@/components/FinancialSettingsModal";
 import { Income } from "@/components/IncomeTable";
 
 export type Expense = {
@@ -41,6 +42,11 @@ export default function DashboardPage() {
     const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
     const [showAddIncome, setShowAddIncome] = useState(false);
     const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
+
+    // Financial config state
+    const [salaryAmount, setSalaryAmount] = useState(0);
+    const [fixedExpensesTotal, setFixedExpensesTotal] = useState(0);
 
     // Month navigation
     const isCurrentMonth = selectedMonth === nowKey();
@@ -85,7 +91,30 @@ export default function DashboardPage() {
         }
     }, []);
 
+    const fetchConfig = useCallback(async (month: string) => {
+        try {
+            const [salaryRes, fixedRes, overtimeRes] = await Promise.all([
+                fetch("/api/salary-config"),
+                fetch("/api/fixed-expenses"),
+                fetch(`/api/monthly-overtime?month=${month}`),
+            ]);
+            const salary = salaryRes.ok ? await salaryRes.json() : null;
+            const fixed = fixedRes.ok ? await fixedRes.json() : [];
+            const overtime = overtimeRes.ok ? await overtimeRes.json() : null;
+
+            const base = salary?.baseSalary ?? 0;
+            const extra = overtime?.amount ?? 0;
+            setSalaryAmount(base + extra);
+            setFixedExpensesTotal(
+                Array.isArray(fixed) ? fixed.reduce((s: number, f: { amount: number }) => s + f.amount, 0) : 0
+            );
+        } catch {
+            // silently ignore — config is optional
+        }
+    }, []);
+
     useEffect(() => { fetchAll(); }, [fetchAll]);
+    useEffect(() => { fetchConfig(selectedMonth); }, [fetchConfig, selectedMonth]);
 
     const handleDeleteExpense = async (id: string) => {
         await fetch(`/api/expenses/${id}`, { method: "DELETE" });
@@ -143,6 +172,17 @@ export default function DashboardPage() {
                         <span className="hidden sm:block text-sm text-slate-400">
                             Olá, <span className="text-indigo-400 font-medium">{session?.user?.name ?? "..."}</span>
                         </span>
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            title="Configurações Financeiras"
+                            className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1e1e35] rounded-lg transition-all duration-200"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </button>
                         <button
                             onClick={async () => {
                                 await signOut({ redirect: false });
@@ -262,7 +302,13 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Stats — filtradas pelo mês */}
-                    <StatsCards expenses={filteredExpenses} incomes={filteredIncomes} loading={loading} />
+                    <StatsCards
+                        expenses={filteredExpenses}
+                        incomes={filteredIncomes}
+                        loading={loading}
+                        salaryAmount={salaryAmount}
+                        fixedExpensesTotal={fixedExpensesTotal}
+                    />
 
                     {/* Gráficos */}
                     <Charts
@@ -313,6 +359,13 @@ export default function DashboardPage() {
             )}
             {editingIncome && (
                 <EditIncomeModal income={editingIncome} onClose={() => setEditingIncome(null)} onSaved={() => { setEditingIncome(null); fetchAll(); }} />
+            )}
+            {showSettings && (
+                <FinancialSettingsModal
+                    selectedMonth={selectedMonth}
+                    onClose={() => setShowSettings(false)}
+                    onDataChanged={() => fetchConfig(selectedMonth)}
+                />
             )}
         </div>
     );

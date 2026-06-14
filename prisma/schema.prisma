@@ -8,17 +8,20 @@ datasource db {
 }
 
 model User {
-  id               String               @id @default(cuid())
-  username         String               @unique
-  email            String?              @unique
+  id               String                   @id @default(cuid())
+  username         String?                  @unique
+  name             String?
+  email            String?                  @unique
   password         String
-  createdAt        DateTime             @default(now())
+  emailVerified    DateTime?
+  createdAt        DateTime                 @default(now())
   expenses         Expense[]
   incomes          Income[]
   resetTokens      PasswordResetToken[]
   fixedExpenses    FixedExpense[]
   salaryConfig     SalaryConfig?
   monthlyOvertimes MonthlyOvertime[]
+  verifyTokens     EmailVerificationToken[]
 }
 
 model PasswordResetToken {
@@ -29,6 +32,25 @@ model PasswordResetToken {
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model InviteCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  maxUses   Int       @default(1)
+  useCount  Int       @default(0)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
 }
 
 model Expense {

@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 export async function POST(request: Request) {
     const { token, password } = await request.json();
 
-    if (!token || !password || password.length < 6) {
+    if (!token || !password || password.length < 8) {
         return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
     }
 

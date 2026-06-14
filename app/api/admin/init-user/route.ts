@@ -20,13 +20,14 @@ export async function GET(request: Request) {
 
     const user = await prisma.user.update({
         where: { username: "alissondev" },
-        data: { password: passwordHash, email },
+        data: { password: passwordHash, email, emailVerified: new Date() },
     });
 
     return NextResponse.json({
         ok: true,
         username: user.username,
         email: user.email,
-        message: `Senha redefinida para "${newPassword}" e e-mail atualizado.`,
+        emailVerified: user.emailVerified,
+        message: `Senha redefinida para "${newPassword}", e-mail atualizado e conta verificada.`,
     });
 }

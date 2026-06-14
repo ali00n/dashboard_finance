@@ -8,21 +8,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         CredentialsProvider({
             name: "credentials",
             credentials: {
-                username: { label: "Usuário", type: "text" },
+                email: { label: "E-mail", type: "email" },
                 password: { label: "Senha", type: "password" },
             },
             async authorize(credentials) {
-                if (!credentials?.username || !credentials?.password) return null;
+                if (!credentials?.email || !credentials?.password) return null;
 
-                const user = await prisma.user.findUnique({
-                    where: { username: credentials.username as string }
-                });
+                const email = (credentials.email as string).toLowerCase().trim();
+
+                const user = await prisma.user.findUnique({ where: { email } });
                 if (!user) return null;
 
                 const isValid = await bcrypt.compare(credentials.password as string, user.password);
                 if (!isValid) return null;
 
-                return { id: user.id, name: user.username, email: user.username };
+                if (!user.emailVerified) return null;
+
+                return {
+                    id: user.id,
+                    name: user.name || user.username || email.split("@")[0],
+                    email: user.email ?? email,
+                };
             },
         }),
     ],
@@ -34,14 +40,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         async jwt({ token, user }) {
             if (user) {
                 token.id = user.id;
-                token.username = user.name;
+                token.name = user.name;
+                token.email = user.email;
             }
             return token;
         },
         async session({ session, token }) {
             if (token) {
                 session.user.id = token.id as string;
-                session.user.name = token.username as string;
+                session.user.name = token.name as string;
+                session.user.email = token.email as string;
             }
             return session;
         },

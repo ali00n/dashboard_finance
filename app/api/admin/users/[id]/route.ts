@@ -91,6 +91,16 @@ export async function DELETE(
         return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
 
-    await prisma.user.delete({ where: { id } });
+    // Explicitly delete related records first (Expense and Income had no cascade)
+    await prisma.$transaction([
+        prisma.expense.deleteMany({ where: { userId: id } }),
+        prisma.income.deleteMany({ where: { userId: id } }),
+        prisma.fixedExpense.deleteMany({ where: { userId: id } }),
+        prisma.monthlyOvertime.deleteMany({ where: { userId: id } }),
+        prisma.salaryConfig.deleteMany({ where: { userId: id } }),
+        prisma.passwordResetToken.deleteMany({ where: { userId: id } }),
+        prisma.emailVerificationToken.deleteMany({ where: { userId: id } }),
+        prisma.user.delete({ where: { id } }),
+    ]);
     return NextResponse.json({ ok: true, message: "Usuário e todos os dados foram removidos." });
 }

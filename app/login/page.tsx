@@ -305,7 +305,7 @@ export default function LoginPage() {
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => { setTab("login"); setRegSuccess(""); }}
+                                            onClick={() => { setTab("login"); setRegSuccess(""); setLoginEmail(regEmail); }}
                                             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all"
                                         >
                                             Ir para o Login

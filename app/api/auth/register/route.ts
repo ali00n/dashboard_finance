@@ -1,41 +1,9 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import crypto from "crypto";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-async function resendVerificationEmail(userId: string, email: string) {
-    try {
-        await prisma.emailVerificationToken.updateMany({
-            where: { userId, used: false },
-            data: { used: true },
-        });
-        const token = crypto.randomBytes(32).toString("hex");
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await prisma.emailVerificationToken.create({ data: { token, userId, expiresAt } });
-
-        const baseUrl = process.env.NEXTAUTH_URL ?? `https://${process.env.VERCEL_URL}`;
-        const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        await resend.emails.send({
-            from: process.env.RESEND_FROM ?? "onboarding@resend.dev",
-            to: email,
-            subject: "Confirme seu e-mail — Finance Dashboard",
-            html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#07070d;color:#e2e8f0;border-radius:16px;">
-                <h2 style="color:#fff;text-align:center;">Confirme seu e-mail</h2>
-                <p style="color:#94a3b8;text-align:center;">Clique no botão abaixo para ativar sua conta (link válido por 24h).</p>
-                <div style="text-align:center;margin:32px 0;">
-                    <a href="${verifyUrl}" style="display:inline-block;padding:14px 32px;background:#6366f1;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Confirmar e-mail</a>
-                </div>
-                <p style="color:#475569;font-size:12px;text-align:center;">Ou copie: <a href="${verifyUrl}" style="color:#6366f1;">${verifyUrl}</a></p>
-            </div>`,
-        });
-    } catch (err) {
-        console.error("resendVerificationEmail failed:", err);
-    }
-}
 
 export async function POST(request: Request) {
     try {
@@ -60,14 +28,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "As senhas não coincidem." }, { status: 400 });
         }
 
-        // 1. Check email not already in use BEFORE consuming the invite code
+        // 1. Check email availability before consuming invite code
         const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existing) {
-            // If account exists but is unverified, resend the verification email
+            // Account exists but was never activated — auto-activate so they can log in
             if (!existing.emailVerified) {
-                await resendVerificationEmail(existing.id, normalizedEmail);
+                await prisma.user.update({
+                    where: { id: existing.id },
+                    data: { emailVerified: new Date() },
+                });
                 return NextResponse.json(
-                    { ok: true, message: "Essa conta já existe mas não foi verificada. Reenviamos o e-mail de verificação. Verifique sua caixa de entrada (e o spam)." },
+                    { ok: true, message: "Conta ativada! Você já pode fazer login com seu e-mail e senha." },
                     { status: 200 }
                 );
             }
@@ -90,35 +61,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Código de convite expirado." }, { status: 400 });
         }
 
-        // 3. Atomically: consume code + create user + create verification token
+        // 3. Atomically: consume code + create user (already verified — invite code is the trust gate)
         const hashedPassword = await bcrypt.hash(password, 12);
         const name = normalizedEmail.split("@")[0];
-        const token = crypto.randomBytes(32).toString("hex");
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-        let user: { id: string };
         try {
-            const result = await prisma.$transaction(async (tx) => {
-                // Re-check inside transaction to prevent race conditions
+            await prisma.$transaction(async (tx) => {
                 const inv = await tx.inviteCode.findUnique({ where: { code: normalizedCode } });
                 if (!inv || inv.useCount >= inv.maxUses) throw new Error("CODE_MAXED");
 
-                const newUser = await tx.user.create({
-                    data: { email: normalizedEmail, name, password: hashedPassword },
-                });
-
-                await tx.emailVerificationToken.create({
-                    data: { token, userId: newUser.id, expiresAt },
+                await tx.user.create({
+                    data: {
+                        email: normalizedEmail,
+                        name,
+                        password: hashedPassword,
+                        emailVerified: new Date(), // auto-verified — invite code is the gate
+                    },
                 });
 
                 await tx.inviteCode.update({
                     where: { id: inv.id },
                     data: { useCount: { increment: 1 } },
                 });
-
-                return newUser;
             });
-            user = result;
         } catch (e: any) {
             if (e.message === "CODE_MAXED") {
                 return NextResponse.json({ error: "Código de convite já foi utilizado o número máximo de vezes." }, { status: 400 });
@@ -126,40 +91,34 @@ export async function POST(request: Request) {
             throw e;
         }
 
-        const baseUrl = process.env.NEXTAUTH_URL ?? `https://${process.env.VERCEL_URL}`;
-        const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
-
-        // Send verification email — non-fatal: account is already created
+        // Send welcome email — optional, non-blocking, no verification link needed
         try {
+            const { Resend } = await import("resend");
             const resend = new Resend(process.env.RESEND_API_KEY);
+            const token = crypto.randomBytes(32).toString("hex");
             await resend.emails.send({
                 from: process.env.RESEND_FROM ?? "onboarding@resend.dev",
                 to: normalizedEmail,
-                subject: "Confirme seu e-mail — Finance Dashboard",
+                subject: "Bem-vindo ao Finance Dashboard!",
                 html: `
                     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#07070d;color:#e2e8f0;border-radius:16px;">
-                        <div style="text-align:center;margin-bottom:24px;">
-                            <div style="display:inline-block;width:48px;height:48px;background:#312e81;border-radius:12px;line-height:48px;font-size:24px;">💰</div>
-                        </div>
-                        <h2 style="color:#fff;margin-bottom:8px;text-align:center;">Bem-vindo ao Finance Dashboard!</h2>
-                        <p style="color:#94a3b8;text-align:center;">Clique no botão abaixo para confirmar seu e-mail e ativar sua conta. O link expira em <strong>24 horas</strong>.</p>
+                        <h2 style="color:#fff;text-align:center;">Bem-vindo ao Finance Dashboard!</h2>
+                        <p style="color:#94a3b8;text-align:center;">Sua conta foi criada com sucesso. Você já pode fazer login.</p>
                         <div style="text-align:center;margin:32px 0;">
-                            <a href="${verifyUrl}" style="display:inline-block;padding:14px 32px;background:#6366f1;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:15px;">
-                                Confirmar e-mail
+                            <a href="${process.env.NEXTAUTH_URL ?? `https://${process.env.VERCEL_URL}`}/login"
+                               style="display:inline-block;padding:14px 32px;background:#6366f1;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">
+                                Acessar o Dashboard
                             </a>
                         </div>
-                        <p style="color:#475569;font-size:13px;text-align:center;">Se você não criou uma conta, pode ignorar este e-mail com segurança.</p>
-                        <hr style="border-color:#1e1e35;margin:24px 0;" />
-                        <p style="color:#475569;font-size:12px;text-align:center;">Ou copie o link: <a href="${verifyUrl}" style="color:#6366f1;">${verifyUrl}</a></p>
                     </div>
                 `,
             });
-        } catch (emailErr) {
-            console.error("register: email send failed (account still created):", emailErr);
+        } catch {
+            // Welcome email is optional — ignore failures
         }
 
         return NextResponse.json(
-            { ok: true, message: "Conta criada! Verifique seu e-mail para ativar o acesso." },
+            { ok: true, message: "Conta criada com sucesso! Você já pode fazer login." },
             { status: 201 }
         );
     } catch (err) {

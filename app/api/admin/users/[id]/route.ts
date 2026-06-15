@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import bcrypt from "bcryptjs";
 
 function isAuthorized(request: Request): boolean {
     const adminSecret = process.env.ADMIN_SECRET;
@@ -46,6 +45,7 @@ export async function PATCH(
         if (password.length < 8) {
             return NextResponse.json({ error: "Senha deve ter no mínimo 8 caracteres." }, { status: 400 });
         }
+        const bcrypt = await import("bcryptjs");
         data.password = await bcrypt.hash(password, 12);
     }
 

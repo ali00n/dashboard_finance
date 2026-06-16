@@ -23,25 +23,82 @@ const nowKey = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-function exportCsv(rows: Expense[] | Income[], type: View, month: string) {
-    const header = "Título,Valor,Categoria,Data,Descrição";
-    const lines = rows.map(r =>
-        [
-            `"${r.title.replace(/"/g, '""')}"`,
-            r.amount.toFixed(2).replace(".", ","),
-            r.category,
-            new Date(r.date).toLocaleDateString("pt-BR"),
-            `"${(r.description ?? "").replace(/"/g, '""')}"`,
-        ].join(";")
-    );
-    const csv = [header, ...lines].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${type === "gastos" ? "gastos" : "recebimentos"}-${month}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+function exportPdf(rows: Expense[] | Income[], type: View, month: string) {
+    const title = type === "gastos" ? "Gastos" : "Recebimentos";
+    const monthLabel = new Date(month + "-15").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const total = rows.reduce((s, r) => s + r.amount, 0);
+
+    const rowsHtml = rows.map((r, i) => `
+        <tr style="background:${i % 2 === 0 ? "#fff" : "#f9fafb"}">
+            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb">${r.title}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb">${r.category}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb">${new Date(r.date).toLocaleDateString("pt-BR")}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;color:${type === "gastos" ? "#dc2626" : "#059669"}">${fmt(r.amount)}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px">${r.description ?? ""}</td>
+        </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${title} — ${monthLabel}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #111; padding: 32px; font-size: 13px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 16px; }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header p { color: #6b7280; margin-top: 4px; font-size: 12px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      background: ${type === "gastos" ? "#fee2e2" : "#d1fae5"}; color: ${type === "gastos" ? "#b91c1c" : "#065f46"}; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    thead tr { background: #f3f4f6; }
+    th { padding: 10px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+    th:last-child { text-align: right; }
+    .total-row td { padding: 12px 10px; font-weight: 700; font-size: 14px; border-top: 2px solid #e5e7eb; }
+    .total-row td:last-child { text-align: right; color: ${type === "gastos" ? "#dc2626" : "#059669"}; }
+    .footer { margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center; }
+    @media print { body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>${title}</h1>
+      <p>${monthLabel} · ${rows.length} registro${rows.length !== 1 ? "s" : ""}</p>
+    </div>
+    <span class="badge">${title}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Título</th>
+        <th>Categoria</th>
+        <th>Data</th>
+        <th style="text-align:right">Valor</th>
+        <th>Descrição</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="3">Total</td>
+        <td colspan="2" style="text-align:right">${fmt(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <p class="footer">Finance Dashboard · Gerado em ${new Date().toLocaleString("pt-BR")}</p>
+  <script>window.onload = () => { window.print(); }<\/script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+        toast("Permita popups para exportar o PDF", "error");
+        return;
+    }
+    win.document.write(html);
+    win.document.close();
 }
 
 export default function DashboardPage() {
@@ -265,21 +322,20 @@ export default function DashboardPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                         <h2 className="text-xl sm:text-2xl font-bold text-white">Visão Geral</h2>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                            {/* Export CSV */}
+                            {/* Export PDF */}
                             {tableCount > 0 && (
                                 <button
                                     onClick={() => {
                                         const rows = view === "gastos" ? filteredExpenses : filteredIncomes;
-                                        exportCsv(rows, view, selectedMonth);
-                                        toast("CSV exportado com sucesso", "info");
+                                        exportPdf(rows, view, selectedMonth);
                                     }}
-                                    title="Exportar CSV"
+                                    title="Exportar PDF"
                                     className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-slate-400 hover:text-white bg-[#0e0e1a] hover:bg-[#1e1e35] border border-[#1e1e35] rounded-xl transition-all duration-200"
                                 >
                                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                     </svg>
-                                    <span className="hidden sm:inline">CSV</span>
+                                    <span className="hidden sm:inline">PDF</span>
                                 </button>
                             )}
                             {view === "gastos" ? (

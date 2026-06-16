@@ -1,22 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { Income } from "@/types";
+import { INCOME_CATEGORY_COLORS } from "@/lib/categories";
 
-type Income = {
-    id: string;
-    title: string;
-    amount: number;
-    category: string;
-    description: string | null;
-    date: string;
-};
+export type { Income };
 
-const INCOME_CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-    Salário: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "bg-emerald-400" },
-    Freelance: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "bg-blue-400" },
-    Investimento: { bg: "bg-purple-500/10", text: "text-purple-400", dot: "bg-purple-400" },
-    Bônus: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "bg-amber-400" },
-    Outro: { bg: "bg-slate-500/10", text: "text-slate-400", dot: "bg-slate-400" },
+const PAGE_SIZE = 10;
+
+type Props = {
+    incomes: Income[];
+    loading: boolean;
+    onEdit: (income: Income) => void;
+    onDelete: (id: string) => void;
 };
 
 function DeleteModal({ income, onConfirm, onCancel }: { income: Income; onConfirm: () => void; onCancel: () => void }) {
@@ -44,20 +40,32 @@ function DeleteModal({ income, onConfirm, onCancel }: { income: Income; onConfir
     );
 }
 
-type Props = {
-    incomes: Income[];
-    loading: boolean;
-    onEdit: (income: Income) => void;
-    onDelete: (id: string) => void;
-};
-
-export type { Income };
-
 export default function IncomeTable({ incomes, loading, onEdit, onDelete }: Props) {
     const [deletingIncome, setDeletingIncome] = useState<Income | null>(null);
+    const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
 
     const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return incomes;
+        return incomes.filter(e =>
+            e.title.toLowerCase().includes(q) ||
+            e.category.toLowerCase().includes(q) ||
+            (e.description?.toLowerCase().includes(q) ?? false)
+        );
+    }, [incomes, search]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+    const handleSearchChange = (v: string) => {
+        setSearch(v);
+        setPage(1);
+    };
 
     if (loading) {
         return (
@@ -92,8 +100,34 @@ export default function IncomeTable({ incomes, loading, onEdit, onDelete }: Prop
 
     return (
         <>
+            {/* Barra de busca */}
+            <div className="mb-3">
+                <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => handleSearchChange(e.target.value)}
+                        placeholder="Buscar por título, categoria ou descrição..."
+                        className="w-full pl-9 pr-4 py-2.5 bg-[#0e0e1a] border border-[#1e1e35] rounded-xl text-sm text-slate-200 placeholder-slate-600
+                            focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                    />
+                    {search && (
+                        <button
+                            onClick={() => handleSearchChange("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl overflow-hidden">
-                {/* Cabeçalho — só aparece no md: */}
                 <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-3 bg-[#07070d] border-b border-[#1e1e35] text-xs font-medium text-slate-500 uppercase tracking-wider">
                     <div className="col-span-4">Recebimento</div>
                     <div className="col-span-2">Categoria</div>
@@ -102,77 +136,133 @@ export default function IncomeTable({ incomes, loading, onEdit, onDelete }: Prop
                     <div className="col-span-2 text-center">Ações</div>
                 </div>
 
-                {incomes.map((income, idx) => {
-                    const catStyle = INCOME_CATEGORY_COLORS[income.category] ?? INCOME_CATEGORY_COLORS["Outro"];
-                    return (
-                        <div key={income.id}
-                            className="px-4 sm:px-5 py-3 sm:py-4 border-b border-[#1e1e35] last:border-0 hover:bg-[#111126] transition-colors duration-150 fade-in"
-                            style={{ animationDelay: `${idx * 40}ms` }}
-                        >
-                            {/* Layout Mobile */}
-                            <div className="md:hidden">
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className="min-w-0">
-                                        <p className="font-medium text-white text-sm leading-tight">{income.title}</p>
+                {paginated.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                        <p className="text-slate-500 text-sm">Nenhum resultado para &quot;{search}&quot;</p>
+                    </div>
+                ) : (
+                    paginated.map((income, idx) => {
+                        const catStyle = INCOME_CATEGORY_COLORS[income.category] ?? INCOME_CATEGORY_COLORS["Outro"];
+                        return (
+                            <div key={income.id}
+                                className="px-4 sm:px-5 py-3 sm:py-4 border-b border-[#1e1e35] last:border-0 hover:bg-[#111126] transition-colors duration-150 fade-in"
+                                style={{ animationDelay: `${idx * 40}ms` }}
+                            >
+                                {/* Mobile */}
+                                <div className="md:hidden">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-white text-sm leading-tight">{income.title}</p>
+                                            {income.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{income.description}</p>}
+                                        </div>
+                                        <span className="text-sm font-semibold text-emerald-400 shrink-0">{fmt(income.amount)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium ${catStyle.bg} ${catStyle.text}`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${catStyle.dot}`} />
+                                                {income.category}
+                                            </span>
+                                            <span className="text-xs text-slate-500">{fmtDate(income.date)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <button onClick={() => onEdit(income)}
+                                                className="p-1.5 text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg transition-all"
+                                                title="Editar">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            </button>
+                                            <button onClick={() => setDeletingIncome(income)}
+                                                className="p-1.5 text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                                title="Excluir">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Desktop */}
+                                <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                                    <div className="col-span-4">
+                                        <p className="font-medium text-white text-sm">{income.title}</p>
                                         {income.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{income.description}</p>}
                                     </div>
-                                    <span className="text-sm font-semibold text-emerald-400 shrink-0">{fmt(income.amount)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium ${catStyle.bg} ${catStyle.text}`}>
+                                    <div className="col-span-2">
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${catStyle.bg} ${catStyle.text}`}>
                                             <span className={`w-1.5 h-1.5 rounded-full ${catStyle.dot}`} />
                                             {income.category}
                                         </span>
-                                        <span className="text-xs text-slate-500">{fmtDate(income.date)}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <button onClick={() => onEdit(income)}
-                                            className="p-1.5 text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg transition-all"
-                                            title="Editar">
+                                    <div className="col-span-2 text-sm text-slate-400">
+                                        {new Date(income.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                    </div>
+                                    <div className="col-span-2 text-right">
+                                        <span className="text-sm font-semibold text-emerald-400">{fmt(income.amount)}</span>
+                                    </div>
+                                    <div className="col-span-2 flex items-center justify-center gap-2">
+                                        <button onClick={() => onEdit(income)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-lg transition-all duration-200">
                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            Editar
                                         </button>
-                                        <button onClick={() => setDeletingIncome(income)}
-                                            className="p-1.5 text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
-                                            title="Excluir">
+                                        <button onClick={() => setDeletingIncome(income)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-lg transition-all duration-200">
                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                         </button>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Layout Desktop */}
-                            <div className="hidden md:grid grid-cols-12 gap-4 items-center">
-                                <div className="col-span-4">
-                                    <p className="font-medium text-white text-sm">{income.title}</p>
-                                    {income.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{income.description}</p>}
-                                </div>
-                                <div className="col-span-2">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${catStyle.bg} ${catStyle.text}`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${catStyle.dot}`} />
-                                        {income.category}
-                                    </span>
-                                </div>
-                                <div className="col-span-2 text-sm text-slate-400">
-                                    {new Date(income.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                                </div>
-                                <div className="col-span-2 text-right">
-                                    <span className="text-sm font-semibold text-emerald-400">{fmt(income.amount)}</span>
-                                </div>
-                                <div className="col-span-2 flex items-center justify-center gap-2">
-                                    <button onClick={() => onEdit(income)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-lg transition-all duration-200">
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                        Editar
-                                    </button>
-                                    <button onClick={() => setDeletingIncome(income)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-lg transition-all duration-200">
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })
+                )}
             </div>
+
+            {/* Paginação */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-3 px-1">
+                    <span className="text-xs text-slate-500">
+                        {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} — página {safePage} de {totalPages}
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={safePage === 1}
+                            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1e1e35] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                            .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+                                if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push("...");
+                                acc.push(p);
+                                return acc;
+                            }, [])
+                            .map((p, i) =>
+                                p === "..." ? (
+                                    <span key={`ellipsis-${i}`} className="w-7 h-7 flex items-center justify-center text-slate-600 text-xs">…</span>
+                                ) : (
+                                    <button
+                                        key={p}
+                                        onClick={() => setPage(p as number)}
+                                        className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-medium transition-colors
+                                            ${safePage === p ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white hover:bg-[#1e1e35]"}`}
+                                    >
+                                        {p}
+                                    </button>
+                                )
+                            )}
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={safePage === totalPages}
+                            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1e1e35] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {deletingIncome && (
                 <DeleteModal

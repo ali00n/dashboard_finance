@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_COLORS } from "@/lib/categories";
+import { toast } from "@/lib/toast";
 
 export type FixedExpense = {
     id: string;
@@ -15,17 +17,6 @@ type Props = {
     selectedMonth: string;
     onClose: () => void;
     onDataChanged: () => void;
-};
-
-const EXPENSE_CATEGORIES = ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Outros"];
-
-const CATEGORY_COLORS: Record<string, string> = {
-    Alimentação: "text-emerald-400",
-    Transporte: "text-blue-400",
-    Moradia: "text-amber-400",
-    Lazer: "text-purple-400",
-    Saúde: "text-red-400",
-    Outros: "text-slate-400",
 };
 
 export default function FinancialSettingsModal({ selectedMonth, onClose, onDataChanged }: Props) {
@@ -55,6 +46,7 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
     const [formError, setFormError] = useState("");
 
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [togglingId, setTogglingId] = useState<string | null>(null);
 
     // Invite codes state
     type InviteCode = { id: string; code: string; maxUses: number; useCount: number; expiresAt: string | null; createdAt: string };
@@ -101,6 +93,7 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
             if (res.ok) {
                 const code = await res.json();
                 setInviteCodes(prev => [code, ...prev]);
+                toast("Código de convite gerado");
             }
         } finally {
             setInviteGenerating(false);
@@ -135,6 +128,7 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                 return;
             }
             setSalarySaved(true);
+            toast("Configuração de salário salva");
             onDataChanged();
         } catch {
             setSalaryError("Erro ao salvar. Tente novamente.");
@@ -196,8 +190,10 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
             const saved = await res.json();
             if (editingId) {
                 setFixedExpenses(prev => prev.map(fe => fe.id === editingId ? saved : fe));
+                toast("Gasto fixo atualizado");
             } else {
                 setFixedExpenses(prev => [...prev, saved]);
+                toast("Gasto fixo adicionado");
             }
             cancelForm();
             onDataChanged();
@@ -213,13 +209,35 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
         try {
             await fetch(`/api/fixed-expenses/${id}`, { method: "DELETE" });
             setFixedExpenses(prev => prev.filter(fe => fe.id !== id));
+            toast("Gasto fixo removido", "error");
             onDataChanged();
         } finally {
             setDeletingId(null);
         }
     };
 
-    const totalFixed = fixedExpenses.reduce((s, fe) => s + fe.amount, 0);
+    const toggleFixedExpense = async (fe: FixedExpense) => {
+        setTogglingId(fe.id);
+        try {
+            const res = await fetch(`/api/fixed-expenses/${fe.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ isActive: !fe.isActive }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setFixedExpenses(prev => prev.map(f => f.id === fe.id ? updated : f));
+                toast(updated.isActive ? "Gasto fixo ativado" : "Gasto fixo pausado", "info");
+                onDataChanged();
+            }
+        } finally {
+            setTogglingId(null);
+        }
+    };
+
+    const activeFixedTotal = fixedExpenses
+        .filter(fe => fe.isActive)
+        .reduce((s, fe) => s + fe.amount, 0);
     const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
     return (
@@ -336,7 +354,7 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                         {inviteCodes.length === 0 ? (
                             <div className="bg-[#0e0e1a] border border-dashed border-[#1e1e35] rounded-2xl p-6 text-center">
                                 <p className="text-slate-500 text-sm">Nenhum convite gerado ainda.</p>
-                                <p className="text-slate-600 text-xs mt-1">Clique em "Gerar Código" para criar um.</p>
+                                <p className="text-slate-600 text-xs mt-1">Clique em &quot;Gerar Código&quot; para criar um.</p>
                             </div>
                         ) : (
                             <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl overflow-hidden">
@@ -362,19 +380,9 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                                                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-xs rounded-lg transition-colors shrink-0"
                                                 >
                                                     {copiedCode === inv.code ? (
-                                                        <>
-                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                            Copiado!
-                                                        </>
+                                                        <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Copiado!</>
                                                     ) : (
-                                                        <>
-                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                                            </svg>
-                                                            Copiar
-                                                        </>
+                                                        <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>Copiar</>
                                                     )}
                                                 </button>
                                             )}
@@ -480,53 +488,84 @@ export default function FinancialSettingsModal({ selectedMonth, onClose, onDataC
                             </div>
                         ) : (
                             <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl overflow-hidden">
-                                {fixedExpenses.map((fe, i) => (
-                                    <div
-                                        key={fe.id}
-                                        className={`flex items-center gap-3 px-4 py-3 ${i !== fixedExpenses.length - 1 ? "border-b border-[#1e1e35]" : ""} ${editingId === fe.id ? "bg-indigo-600/5" : ""}`}
-                                    >
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-white truncate">{fe.title}</p>
-                                            <p className={`text-xs ${CATEGORY_COLORS[fe.category] ?? "text-slate-400"}`}>
-                                                {fe.category}
-                                            </p>
-                                        </div>
-                                        <span className="text-sm font-semibold text-red-400 shrink-0">
-                                            {fmt(fe.amount)}
-                                        </span>
-                                        {editingId !== fe.id && (
-                                            <div className="flex items-center gap-1 shrink-0">
-                                                <button
-                                                    onClick={() => openEditForm(fe)}
-                                                    className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-600/10 rounded-lg transition-colors"
-                                                >
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                    </svg>
-                                                </button>
-                                                <button
-                                                    onClick={() => deleteFixedExpense(fe.id)}
-                                                    disabled={deletingId === fe.id}
-                                                    className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-600/10 rounded-lg transition-colors disabled:opacity-50"
-                                                >
-                                                    {deletingId === fe.id ? (
-                                                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                                        </svg>
-                                                    ) : (
-                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                        </svg>
-                                                    )}
-                                                </button>
+                                {fixedExpenses.map((fe, i) => {
+                                    const catColor = EXPENSE_CATEGORY_COLORS[fe.category]?.text ?? "text-slate-400";
+                                    return (
+                                        <div
+                                            key={fe.id}
+                                            className={`flex items-center gap-3 px-4 py-3 ${i !== fixedExpenses.length - 1 ? "border-b border-[#1e1e35]" : ""} ${editingId === fe.id ? "bg-indigo-600/5" : ""} ${!fe.isActive ? "opacity-50" : ""}`}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-white truncate">{fe.title}</p>
+                                                <p className={`text-xs ${catColor}`}>
+                                                    {fe.category}
+                                                    {!fe.isActive && <span className="ml-1.5 text-slate-600">(pausado)</span>}
+                                                </p>
                                             </div>
-                                        )}
-                                    </div>
-                                ))}
+                                            <span className={`text-sm font-semibold shrink-0 ${fe.isActive ? "text-red-400" : "text-slate-600"}`}>
+                                                {fmt(fe.amount)}
+                                            </span>
+                                            {editingId !== fe.id && (
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {/* Toggle isActive */}
+                                                    <button
+                                                        onClick={() => toggleFixedExpense(fe)}
+                                                        disabled={togglingId === fe.id}
+                                                        title={fe.isActive ? "Pausar" : "Ativar"}
+                                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-50
+                                                            ${fe.isActive
+                                                                ? "text-slate-500 hover:text-amber-400 hover:bg-amber-600/10"
+                                                                : "text-slate-500 hover:text-emerald-400 hover:bg-emerald-600/10"
+                                                            }`}
+                                                    >
+                                                        {togglingId === fe.id ? (
+                                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                            </svg>
+                                                        ) : fe.isActive ? (
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openEditForm(fe)}
+                                                        className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-600/10 rounded-lg transition-colors"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteFixedExpense(fe.id)}
+                                                        disabled={deletingId === fe.id}
+                                                        className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-600/10 rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        {deletingId === fe.id ? (
+                                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                                 <div className="flex items-center justify-between px-4 py-3 border-t border-[#1e1e35] bg-[#0a0a16]">
-                                    <span className="text-xs text-slate-400 font-medium">Total fixo/mês</span>
-                                    <span className="text-sm font-bold text-red-400">{fmt(totalFixed)}</span>
+                                    <span className="text-xs text-slate-400 font-medium">Total ativo/mês</span>
+                                    <span className="text-sm font-bold text-red-400">{fmt(activeFixedTotal)}</span>
                                 </div>
                             </div>
                         )}

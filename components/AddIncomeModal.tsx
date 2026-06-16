@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-
-const INCOME_CATEGORIES = ["Salário", "Freelance", "Investimento", "Bônus", "Outro"];
+import { INCOME_CATEGORIES } from "@/lib/categories";
+import { toast } from "@/lib/toast";
 
 type Props = {
     onClose: () => void;
@@ -27,10 +27,14 @@ export default function AddIncomeModal({ onClose, onSaved }: Props) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
             });
-            if (!res.ok) throw new Error("Erro ao salvar");
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error ?? "Erro ao salvar");
+            }
+            toast("Recebimento adicionado com sucesso");
             onSaved();
-        } catch {
-            setError("Erro ao salvar. Tente novamente.");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Erro ao salvar. Tente novamente.");
         } finally {
             setLoading(false);
         }

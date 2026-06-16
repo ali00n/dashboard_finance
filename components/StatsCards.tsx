@@ -1,5 +1,5 @@
-import { Expense } from "@/app/dashboard/page";
-import { Income } from "@/components/IncomeTable";
+import { Expense, Income } from "@/types";
+import { EXPENSE_CATEGORY_COLORS } from "@/lib/categories";
 
 type Props = {
     expenses: Expense[];
@@ -9,34 +9,23 @@ type Props = {
     fixedExpensesTotal?: number;
 };
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-    Alimentação: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "bg-emerald-400" },
-    Transporte: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "bg-blue-400" },
-    Moradia: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "bg-amber-400" },
-    Lazer: { bg: "bg-purple-500/10", text: "text-purple-400", dot: "bg-purple-400" },
-    Saúde: { bg: "bg-red-500/10", text: "text-red-400", dot: "bg-red-400" },
-    Outros: { bg: "bg-slate-500/10", text: "text-slate-400", dot: "bg-slate-400" },
-};
-
 function StatCard({ label, value, icon, sub, color = "indigo" }: {
     label: string; value: string; icon: React.ReactNode; sub?: string; color?: string;
 }) {
     const colorMap: Record<string, string> = {
-        indigo: "text-indigo-400  bg-indigo-500/10  border-indigo-500/20",
+        indigo:  "text-indigo-400  bg-indigo-500/10  border-indigo-500/20",
         emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-        amber: "text-amber-400   bg-amber-500/10   border-amber-500/20",
-        purple: "text-purple-400  bg-purple-500/10  border-purple-500/20",
-        red: "text-red-400     bg-red-500/10     border-red-500/20",
-        blue: "text-blue-400    bg-blue-500/10    border-blue-500/20",
+        amber:   "text-amber-400   bg-amber-500/10   border-amber-500/20",
+        purple:  "text-purple-400  bg-purple-500/10  border-purple-500/20",
+        red:     "text-red-400     bg-red-500/10     border-red-500/20",
+        blue:    "text-blue-400    bg-blue-500/10    border-blue-500/20",
     };
     return (
-        // p-4 no mobile, p-6 em telas sm:
         <div className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl p-4 sm:p-6 hover:border-indigo-500/30 transition-all duration-300 hover:bg-[#111126]">
             <div className="flex items-start justify-between mb-3 sm:mb-4">
                 <p className="text-xs sm:text-sm font-medium text-slate-400">{label}</p>
                 <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center ${colorMap[color] ?? colorMap.indigo}`}>{icon}</div>
             </div>
-            {/* Valor principal: menor no mobile para caber sem overflow */}
             <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">{value}</p>
             {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
         </div>
@@ -58,7 +47,6 @@ export default function StatsCards({ expenses, incomes, loading, salaryAmount = 
 
     if (loading) {
         return (
-            // grid-cols-2 no mobile, 4 colunas no lg:
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {[...Array(4)].map((_, i) => (
                     <div key={i} className="bg-[#0e0e1a] border border-[#1e1e35] rounded-2xl p-4 sm:p-6 animate-pulse">
@@ -117,4 +105,4 @@ export default function StatsCards({ expenses, incomes, loading, salaryAmount = 
     );
 }
 
-export { CATEGORY_COLORS };
+export { EXPENSE_CATEGORY_COLORS as CATEGORY_COLORS };

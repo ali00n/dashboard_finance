@@ -4,17 +4,8 @@ import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { Expense } from "@/app/dashboard/page";
-import { Income } from "@/components/IncomeTable";
-
-const CATEGORY_HEX: Record<string, string> = {
-    Alimentação: "#10b981",
-    Transporte: "#3b82f6",
-    Moradia: "#f59e0b",
-    Lazer: "#a855f7",
-    Saúde: "#ef4444",
-    Outros: "#64748b",
-};
+import { Expense, Income } from "@/types";
+import { EXPENSE_CATEGORY_HEX } from "@/lib/categories";
 
 type Props = {
     filteredExpenses: Expense[];
@@ -43,7 +34,6 @@ const tooltipStyle = {
 };
 
 export default function Charts({ filteredExpenses, allExpenses, allIncomes }: Props) {
-    // Donut: gastos por categoria no mês selecionado
     const categoryData = Object.entries(
         filteredExpenses.reduce<Record<string, number>>((acc, e) => {
             acc[e.category] = (acc[e.category] ?? 0) + e.amount;
@@ -55,7 +45,6 @@ export default function Charts({ filteredExpenses, allExpenses, allIncomes }: Pr
 
     const totalPie = categoryData.reduce((s, e) => s + e.value, 0);
 
-    // Barras: últimos 6 meses (sempre usa todos os dados)
     const barData = Array.from({ length: 6 }, (_, i) => {
         const d = new Date();
         d.setDate(1);
@@ -95,7 +84,7 @@ export default function Charts({ filteredExpenses, allExpenses, allIncomes }: Pr
                                         strokeWidth={0}
                                     >
                                         {categoryData.map((entry, i) => (
-                                            <Cell key={i} fill={CATEGORY_HEX[entry.name] ?? CATEGORY_HEX.Outros} />
+                                            <Cell key={i} fill={EXPENSE_CATEGORY_HEX[entry.name] ?? EXPENSE_CATEGORY_HEX["Outros"]} />
                                         ))}
                                     </Pie>
                                     <Tooltip
@@ -108,7 +97,7 @@ export default function Charts({ filteredExpenses, allExpenses, allIncomes }: Pr
                         <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full">
                             {categoryData.map(entry => {
                                 const pct = totalPie > 0 ? Math.round((entry.value / totalPie) * 100) : 0;
-                                const color = CATEGORY_HEX[entry.name] ?? CATEGORY_HEX.Outros;
+                                const color = EXPENSE_CATEGORY_HEX[entry.name] ?? EXPENSE_CATEGORY_HEX["Outros"];
                                 return (
                                     <div key={entry.name} className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2 min-w-0">

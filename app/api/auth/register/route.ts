@@ -2,10 +2,22 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
+    const ip = getClientIp(request);
+    const { allowed, retryAfterMs } = checkRateLimit(`register:${ip}`, 5, 60_000);
+    if (!allowed) {
+        return NextResponse.json(
+            { error: "Muitas tentativas. Aguarde antes de tentar novamente." },
+            {
+                status: 429,
+                headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+            }
+        );
+    }
     try {
         const body = await request.json();
         const { email, password, confirmPassword, inviteCode } = body;

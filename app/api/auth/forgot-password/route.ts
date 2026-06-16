@@ -2,9 +2,22 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
     try {
+        const ip = getClientIp(request);
+        const { allowed, retryAfterMs } = checkRateLimit(`forgot:${ip}`, 3, 300_000);
+        if (!allowed) {
+            return NextResponse.json(
+                { error: "Muitas tentativas. Aguarde antes de tentar novamente." },
+                {
+                    status: 429,
+                    headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+                }
+            );
+        }
+
         const { email } = await request.json();
         if (!email) return NextResponse.json({ error: "E-mail obrigatório" }, { status: 400 });
 

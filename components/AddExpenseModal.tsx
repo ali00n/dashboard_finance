@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-
-const CATEGORIES = ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Outros"];
+import { EXPENSE_CATEGORIES } from "@/lib/categories";
+import { toast } from "@/lib/toast";
 
 type Props = {
     onClose: () => void;
@@ -38,10 +38,12 @@ export default function AddExpenseModal({ onClose, onSaved }: Props) {
         setLoading(false);
 
         if (!res.ok) {
-            setError("Erro ao salvar gasto. Verifique os campos.");
+            const data = await res.json().catch(() => ({}));
+            setError(data.error ?? "Erro ao salvar gasto. Verifique os campos.");
             return;
         }
 
+        toast("Gasto adicionado com sucesso");
         onSaved();
     };
 
@@ -125,7 +127,7 @@ export default function AddExpenseModal({ onClose, onSaved }: Props) {
                             className="w-full px-4 py-2.5 bg-[#07070d] border border-[#1e1e35] rounded-xl text-slate-100 text-sm
                 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                         >
-                            {CATEGORIES.map((c) => (
+                            {EXPENSE_CATEGORIES.map((c) => (
                                 <option key={c} value={c}>{c}</option>
                             ))}
                         </select>

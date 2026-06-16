@@ -1,16 +1,39 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-export async function GET() {
+const createSchema = z.object({
+    title: z.string().min(1, "Título obrigatório").max(100),
+    amount: z.coerce.number().positive("Valor deve ser positivo"),
+    category: z.string().min(1, "Categoria obrigatória"),
+    description: z.string().max(500).optional().nullable(),
+    date: z.string().optional(),
+});
+
+export async function GET(request: Request) {
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const month = searchParams.get("month");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = { userId: session.user.id };
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+        const [year, monthNum] = month.split("-").map(Number);
+        where.date = {
+            gte: new Date(year, monthNum - 1, 1),
+            lt: new Date(year, monthNum, 1),
+        };
+    }
+
     const expenses = await prisma.expense.findMany({
-        where: { userId: session.user.id },
-        orderBy: { date: "desc" }
+        where,
+        orderBy: { date: "desc" },
     });
 
     return NextResponse.json(expenses);
@@ -18,34 +41,36 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+
         const session = await auth();
         if (!session?.user?.id) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body = await request.json();
-        const { title, amount, category, description, date } = body;
-
-        if (!title || amount === undefined || !category) {
-            return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+        const parsed = createSchema.safeParse(body);
+        if (!parsed.success) {
+            const issue = parsed.error.issues?.[0];
+            const message = issue?.message ?? "Dados inválidos";
+            return NextResponse.json({ error: message }, { status: 400 });
         }
 
-        const dateStr = date ? new Date(date) : new Date();
+        const { title, amount, category, description, date } = parsed.data;
 
         const expense = await prisma.expense.create({
             data: {
                 title,
-                amount: parseFloat(amount),
+                amount,
                 category,
-                description: description || null,
-                date: dateStr,
-                userId: session.user.id
-            }
+                description: description ?? null,
+                date: date ? new Date(date) : new Date(),
+                userId: session.user.id,
+            },
         });
 
         return NextResponse.json(expense, { status: 201 });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("POST /api/expenses Error:", error);
-        return NextResponse.json({ error: "Internal Server Error", details: error?.message || String(error) }, { status: 500 });
+        return NextResponse.json({ error: "Erro interno" }, { status: 500 });
     }
 }

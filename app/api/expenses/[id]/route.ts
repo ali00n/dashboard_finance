@@ -1,6 +1,15 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+
+const updateSchema = z.object({
+    title: z.string().min(1).max(100).optional(),
+    amount: z.coerce.number().positive().optional(),
+    category: z.string().min(1).optional(),
+    description: z.string().max(500).optional().nullable(),
+    date: z.string().optional(),
+});
 
 export async function PUT(
     request: Request,
@@ -12,25 +21,29 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json();
-    const { title, amount, category, description, date } = body;
-
     const existing = await prisma.expense.findUnique({ where: { id } });
     if (!existing || existing.userId !== session.user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const dateStr = date ? new Date(date) : existing.date;
+    const body = await request.json();
+    const parsed = updateSchema.safeParse(body);
+    if (!parsed.success) {
+        const issue = parsed.error.issues?.[0];
+        return NextResponse.json({ error: issue?.message ?? "Dados inválidos" }, { status: 400 });
+    }
+
+    const { title, amount, category, description, date } = parsed.data;
 
     const expense = await prisma.expense.update({
         where: { id },
         data: {
-            title,
-            amount: parseFloat(amount),
-            category,
-            description: description || null,
-            date: dateStr,
-        }
+            ...(title !== undefined && { title }),
+            ...(amount !== undefined && { amount }),
+            ...(category !== undefined && { category }),
+            description: description ?? null,
+            ...(date !== undefined && { date: new Date(date) }),
+        },
     });
 
     return NextResponse.json(expense);
@@ -46,7 +59,6 @@ export async function DELETE(
     }
 
     const { id } = await params;
-
     const existing = await prisma.expense.findUnique({ where: { id } });
     if (!existing || existing.userId !== session.user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -127,6 +127,7 @@ function ResetPasswordForm() {
                                 ) : "Redefinir senha"}
                             </button>
 
+
                             <Link href="/login" className="block text-center text-sm text-slate-500 hover:text-slate-300 transition-colors">
                                 ← Voltar para o login
                             </Link>

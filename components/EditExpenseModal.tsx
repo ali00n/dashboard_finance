@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Expense } from "@/app/dashboard/page";
-
-const CATEGORIES = ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Outros"];
+import { Expense } from "@/types";
+import { EXPENSE_CATEGORIES } from "@/lib/categories";
+import { toast } from "@/lib/toast";
 
 type Props = {
     expense: Expense;
@@ -40,10 +40,12 @@ export default function EditExpenseModal({ expense, onClose, onSaved }: Props) {
         setLoading(false);
 
         if (!res.ok) {
-            setError("Erro ao atualizar gasto.");
+            const data = await res.json().catch(() => ({}));
+            setError(data.error ?? "Erro ao atualizar gasto.");
             return;
         }
 
+        toast("Gasto atualizado com sucesso");
         onSaved();
     };
 
@@ -127,7 +129,7 @@ export default function EditExpenseModal({ expense, onClose, onSaved }: Props) {
                             className="w-full px-4 py-2.5 bg-[#07070d] border border-[#1e1e35] rounded-xl text-slate-100 text-sm
                 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
                         >
-                            {CATEGORIES.map((c) => (
+                            {EXPENSE_CATEGORIES.map((c) => (
                                 <option key={c} value={c}>{c}</option>
                             ))}
                         </select>

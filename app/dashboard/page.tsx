@@ -11,17 +11,10 @@ import AddIncomeModal from "@/components/AddIncomeModal";
 import EditIncomeModal from "@/components/EditIncomeModal";
 import Charts from "@/components/Charts";
 import FinancialSettingsModal from "@/components/FinancialSettingsModal";
-import { Income } from "@/components/IncomeTable";
+import { Expense, Income } from "@/types";
+import { toast } from "@/lib/toast";
 
-export type Expense = {
-    id: string;
-    title: string;
-    amount: number;
-    category: string;
-    description: string | null;
-    date: string;
-    createdAt: string;
-};
+export type { Expense };
 
 type View = "gastos" | "recebimentos";
 
@@ -29,6 +22,27 @@ const nowKey = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
+
+function exportCsv(rows: Expense[] | Income[], type: View, month: string) {
+    const header = "Título,Valor,Categoria,Data,Descrição";
+    const lines = rows.map(r =>
+        [
+            `"${r.title.replace(/"/g, '""')}"`,
+            r.amount.toFixed(2).replace(".", ","),
+            r.category,
+            new Date(r.date).toLocaleDateString("pt-BR"),
+            `"${(r.description ?? "").replace(/"/g, '""')}"`,
+        ].join(";")
+    );
+    const csv = [header, ...lines].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${type === "gastos" ? "gastos" : "recebimentos"}-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
 
 export default function DashboardPage() {
     const { data: session } = useSession();
@@ -106,10 +120,12 @@ export default function DashboardPage() {
             const extra = overtime?.amount ?? 0;
             setSalaryAmount(base + extra);
             setFixedExpensesTotal(
-                Array.isArray(fixed) ? fixed.reduce((s: number, f: { amount: number }) => s + f.amount, 0) : 0
+                Array.isArray(fixed)
+                    ? fixed.filter((f: { isActive: boolean }) => f.isActive).reduce((s: number, f: { amount: number }) => s + f.amount, 0)
+                    : 0
             );
         } catch {
-            // silently ignore — config is optional
+            // config is optional
         }
     }, []);
 
@@ -118,11 +134,13 @@ export default function DashboardPage() {
 
     const handleDeleteExpense = async (id: string) => {
         await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+        toast("Gasto excluído", "error");
         fetchAll();
     };
 
     const handleDeleteIncome = async (id: string) => {
         await fetch(`/api/incomes/${id}`, { method: "DELETE" });
+        toast("Recebimento excluído", "error");
         fetchAll();
     };
 
@@ -243,10 +261,27 @@ export default function DashboardPage() {
                         ))}
                     </div>
 
-                    {/* Title + Add button */}
+                    {/* Title + Add + Export buttons */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                         <h2 className="text-xl sm:text-2xl font-bold text-white">Visão Geral</h2>
-                        <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            {/* Export CSV */}
+                            {tableCount > 0 && (
+                                <button
+                                    onClick={() => {
+                                        const rows = view === "gastos" ? filteredExpenses : filteredIncomes;
+                                        exportCsv(rows, view, selectedMonth);
+                                        toast("CSV exportado com sucesso", "info");
+                                    }}
+                                    title="Exportar CSV"
+                                    className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-slate-400 hover:text-white bg-[#0e0e1a] hover:bg-[#1e1e35] border border-[#1e1e35] rounded-xl transition-all duration-200"
+                                >
+                                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    <span className="hidden sm:inline">CSV</span>
+                                </button>
+                            )}
                             {view === "gastos" ? (
                                 <button
                                     onClick={() => setShowAddExpense(true)}
@@ -301,7 +336,7 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* Stats — filtradas pelo mês */}
+                    {/* Stats */}
                     <StatsCards
                         expenses={filteredExpenses}
                         incomes={filteredIncomes}
